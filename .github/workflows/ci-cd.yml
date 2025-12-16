@@ -39,18 +39,31 @@ jobs:
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
-    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && secrets.KUBECONFIG != ''
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
 
+    - name: Check if KUBECONFIG is set
+      id: check-kubeconfig
+      run: |
+        if [ -z "${{ secrets.KUBECONFIG }}" ]; then
+          echo "kubeconfig_set=false" >> $GITHUB_OUTPUT
+          echo "⚠️ KUBECONFIG не настроен. Развертывание в Kubernetes будет пропущено."
+        else
+          echo "kubeconfig_set=true" >> $GITHUB_OUTPUT
+          echo "✅ KUBECONFIG настроен. Продолжаем развертывание."
+        fi
+
     - name: Set up kubectl
+      if: steps.check-kubeconfig.outputs.kubeconfig_set == 'true'
       uses: azure/setup-kubectl@v3
       with:
         version: 'latest'
 
     - name: Configure kubectl
+      if: steps.check-kubeconfig.outputs.kubeconfig_set == 'true'
       run: |
         echo "${{ secrets.KUBECONFIG }}" | base64 -d > kubeconfig
         export KUBECONFIG=./kubeconfig
@@ -58,6 +71,7 @@ jobs:
         kubectl cluster-info || exit 1
 
     - name: Deploy to Kubernetes
+      if: steps.check-kubeconfig.outputs.kubeconfig_set == 'true'
       run: |
         export KUBECONFIG=./kubeconfig
         # Обновляем образ в deployment (если нужно)
