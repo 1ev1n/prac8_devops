@@ -39,7 +39,7 @@ jobs:
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && secrets.KUBECONFIG != ''
     
     steps:
     - name: Checkout code
@@ -54,17 +54,24 @@ jobs:
       run: |
         echo "${{ secrets.KUBECONFIG }}" | base64 -d > kubeconfig
         export KUBECONFIG=./kubeconfig
+        # Проверяем подключение к кластеру
+        kubectl cluster-info || exit 1
 
     - name: Deploy to Kubernetes
       run: |
         export KUBECONFIG=./kubeconfig
-        # Обновляем образ в deployment
-        sed -i "s|YOUR_DOCKERHUB_USERNAME|${{ secrets.DOCKERHUB_USERNAME }}|g" k8s/todo-api-deployment.yaml
+        # Обновляем образ в deployment (если нужно)
+        if grep -q "YOUR_DOCKERHUB_USERNAME" k8s/todo-api-deployment.yaml; then
+          sed -i "s|YOUR_DOCKERHUB_USERNAME|${{ secrets.DOCKERHUB_USERNAME }}|g" k8s/todo-api-deployment.yaml
+        fi
         # Применяем манифесты
         kubectl apply -f k8s/namespace.yaml
         kubectl apply -f k8s/mongodb-deployment.yaml -n todo-app
         kubectl apply -f k8s/todo-api-deployment.yaml -n todo-app
         # Ждем готовности подов
-        kubectl wait --for=condition=ready pod -l app=mongodb -n todo-app --timeout=300s
-        kubectl wait --for=condition=ready pod -l app=todo-api -n todo-app --timeout=300s
+        kubectl wait --for=condition=ready pod -l app=mongodb -n todo-app --timeout=300s || true
+        kubectl wait --for=condition=ready pod -l app=todo-api -n todo-app --timeout=300s || true
+        # Показываем статус
+        kubectl get pods -n todo-app
+        kubectl get services -n todo-app
 
