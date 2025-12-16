@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: todo-api
-        image: YOUR_DOCKERHUB_USERNAME/todo-api:latest
+        image: 1ev1n/todo-api:latest
         ports:
         - containerPort: 3000
         env:
